@@ -628,49 +628,83 @@
   resize();
   window.addEventListener('resize', resize);
 
-  var colors = ['#ff5090','#ff80b0','#ffaacc','#ffb8d0','#ffc0e8','#ff70a0'];
+  var colors = ['#ff5090','#ff70a0','#ff80b0','#ff99c0','#ffaacc','#ffb8d0','#ffc0e8','#f070c0','#ff4488','#ffd0e8'];
+  // 3 petal shape types: teardrop, rounded-diamond, soft-heart lobe
+  var SHAPES = ['teardrop','diamond','lobe'];
 
-  function Petal(){
-    this.reset();
+  function Petal(preDistribute){
+    this.shape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+    this.reset(preDistribute);
   }
-  Petal.prototype.reset = function(){
-    this.x  = Math.random() * W;
-    this.y  = -20 - Math.random() * 100;
-    this.r  = 4 + Math.random() * 5;
-    this.vx = (Math.random() - 0.5) * 1.2;
-    this.vy = 0.6 + Math.random() * 1.4;
-    this.rot= Math.random() * Math.PI * 2;
-    this.drot = (Math.random() - 0.5) * 0.06;
-    this.alpha = 0.5 + Math.random() * 0.45;
-    this.color = colors[Math.floor(Math.random() * colors.length)];
-    this.sway = Math.random() * Math.PI * 2;
-    this.swaySpeed = 0.008 + Math.random() * 0.012;
+  Petal.prototype.reset = function(pre){
+    this.x        = Math.random() * (W + 60) - 30;
+    this.y        = pre ? Math.random() * (H + 200) - 100 : -(8 + Math.random() * 60);
+    this.r        = 3.5 + Math.random() * 6;
+    this.vx       = (Math.random() - 0.5) * 1.0;
+    this.vy       = 0.7 + Math.random() * 1.6;
+    this.rot      = Math.random() * Math.PI * 2;
+    this.drot     = (Math.random() - 0.5) * 0.07;
+    this.alpha    = 0.45 + Math.random() * 0.5;
+    this.color    = colors[Math.floor(Math.random() * colors.length)];
+    this.sway     = Math.random() * Math.PI * 2;
+    this.swaySpd  = 0.012 + Math.random() * 0.018;
+    this.swayAmp  = 0.5 + Math.random() * 1.2;
+    this.wobble   = Math.random() * Math.PI * 2;
+    this.wobbleSpd= 0.02 + Math.random() * 0.03;
+    this.scaleX   = 0.6 + Math.random() * 0.8;
   };
   Petal.prototype.update = function(){
-    this.sway += this.swaySpeed;
-    this.x += this.vx + Math.sin(this.sway) * 0.7;
-    this.y += this.vy;
-    this.rot += this.drot;
-    if(this.y > H + 20){ this.reset(); }
+    this.sway   += this.swaySpd;
+    this.wobble += this.wobbleSpd;
+    this.x  += this.vx + Math.sin(this.sway) * this.swayAmp;
+    this.y  += this.vy + Math.sin(this.wobble) * 0.3;
+    this.rot+= this.drot;
+    if(this.y > H + 30 || this.x < -40 || this.x > W + 40){ this.reset(false); }
   };
   Petal.prototype.draw = function(ctx){
     ctx.save();
     ctx.globalAlpha = this.alpha;
     ctx.translate(this.x, this.y);
     ctx.rotate(this.rot);
+    ctx.scale(this.scaleX, 1);
     ctx.fillStyle = this.color;
     ctx.beginPath();
-    ctx.ellipse(0, 0, this.r, this.r * 1.6, 0, 0, Math.PI * 2);
+    var r = this.r;
+    if(this.shape === 'teardrop'){
+      // teardrop: pointed top, rounded bottom
+      ctx.moveTo(0, -r * 1.7);
+      ctx.bezierCurveTo( r * 1.1,  -r * 0.4,  r * 1.0,  r * 1.2,  0,  r * 1.2);
+      ctx.bezierCurveTo(-r * 1.0,  r * 1.2, -r * 1.1,  -r * 0.4,  0, -r * 1.7);
+    } else if(this.shape === 'diamond'){
+      // soft diamond / rounded rhombus
+      ctx.moveTo(0, -r * 1.5);
+      ctx.bezierCurveTo( r * 1.2, -r * 0.3,  r * 1.2,  r * 0.3,  0,  r * 1.5);
+      ctx.bezierCurveTo(-r * 1.2,  r * 0.3, -r * 1.2, -r * 0.3,  0, -r * 1.5);
+    } else {
+      // lobe: like a single rose petal, wider
+      ctx.moveTo(0, -r * 0.6);
+      ctx.bezierCurveTo( r * 1.4, -r * 1.4,  r * 1.6,  r * 0.8,  0,  r * 1.4);
+      ctx.bezierCurveTo(-r * 1.6,  r * 0.8, -r * 1.4, -r * 1.4,  0, -r * 0.6);
+    }
+    ctx.fill();
+    // soft white sheen on petal
+    ctx.globalAlpha = this.alpha * 0.25;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.25, -r * 0.4, r * 0.35, r * 0.18, -0.5, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   };
 
-  // Spawn petals
-  for(var i = 0; i < 40; i++){
-    var p = new Petal();
-    p.y = Math.random() * H; // pre-distribute
-    petals.push(p);
+  // Spawn 90 petals, pre-distributed across the full viewport height
+  for(var i = 0; i < 90; i++){
+    petals.push(new Petal(true));
   }
+
+  // Continuously trickle in fresh petals so the shower never thins
+  var spawnTimer = 0;
+  var SPAWN_INTERVAL = 6; // frames between new petals
+
 
   // Stars (static particles drawn once then re-used)
   var stars = [];
@@ -699,6 +733,22 @@
       ctx.fill();
     });
     ctx.globalAlpha = 1;
+
+    // Trickle new petals to keep the shower continuous
+    spawnTimer++;
+    if(spawnTimer >= SPAWN_INTERVAL){
+      spawnTimer = 0;
+      var np = new Petal(false);
+      np.x = Math.random() * (W + 60) - 30;
+      np.y = -(8 + Math.random() * 30);
+      petals.push(np);
+      // keep pool bounded — retire the oldest petal that's already off-screen
+      if(petals.length > 140){
+        for(var k = 0; k < petals.length; k++){
+          if(petals[k].y > H + 20){ petals.splice(k, 1); break; }
+        }
+      }
+    }
 
     // Update & draw petals
     petals.forEach(function(p){ p.update(); p.draw(ctx); });
